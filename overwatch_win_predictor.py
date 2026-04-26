@@ -9,31 +9,41 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 
 
-def create_vector(img_file, left_offset, width, pixels_to_jump):
+column_names = ['B_Eliminations', 'B_Assists', 'B_Deaths', 'B_Damage', 'B_Healing', 'B_Mitigated',
+                'R_Eliminations', 'R_Assists', 'R_Deaths', 'R_Damage', 'R_Healing', 'R_Mitigated']
+
+
+def create_vector(img_file, top_offset):
     """
     Create a vector by summing the given image's stats column-by-column.
     :param img_file: The current image file being examined
-    :param left_offset: The starting point from the left screen edge (in pixels)
-    :param width: The width of each crop
-    :param pixels_to_jump: The number of pixels to shift left_offset each loop
-    :return new_vector: A vectorized form of the scoreboard being scanned, where each column is the sum of that stat
+    :param top_offset: The distance (pixels) between the top of the screen and the top of the crop
+    :return: A vectorized form of the scoreboard being scanned, where each column is the sum of that stat
     """
 
     new_vector = []
+    left_offset = 1215
+    pixels_to_jump = 75
+    width = 75
 
-    for _ in range(3):  # 3 stats per region
-        image = cv2.imread(img_file.path)
-        image = image[340:340 + 400, left_offset:left_offset + width]
-        image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convert from BGR to grayscale
-        cfg = r'--psm 6 -c tessedit_char_whitelist=0123456789'
-        extracted_text = pytesseract.image_to_string(image_gray, config=cfg)
-        stats = extracted_text.split()
+    for _ in range(2):  # 2 regions
+        for _ in range(3):  # 3 stats per region (due to horizontal gap between E/A/D and DMG/H/MIT)
+            image = cv2.imread(img_file.path)
+            image = image[top_offset:top_offset + 400, left_offset:left_offset + width]
+            image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convert from BGR to grayscale
+            cfg = r'--psm 6 -c tessedit_char_whitelist=0123456789'
+            extracted_text = pytesseract.image_to_string(image_gray, config=cfg)
+            stats = extracted_text.split()
 
-        # Convert each stat to an integer
-        stats = [int(stat) for stat in stats]
-        new_vector.append(sum(stats))
+            # Convert each stat to an integer and add to the current row
+            stats = [int(stat) for stat in stats]
+            new_vector.append(sum(stats))
 
-        left_offset += pixels_to_jump
+            left_offset += pixels_to_jump
+
+        left_offset = 1475
+        pixels_to_jump = 125
+        width = 100
 
     return new_vector
 
@@ -55,7 +65,6 @@ def get_df():
 def add_data():
     """
     Open the images one-by-one and extract data.
-    :return:
     """
 
     if (df := get_df()) is None:
@@ -67,9 +76,9 @@ def add_data():
         return
 
     for file in os.scandir(training_dir):
-        vector_a = create_vector(file, 1215, 75, 75)
-        vector_b = create_vector(file, 1475, 100, 125)
-        df.loc[len(df)] = vector_a + vector_b + [-1]
+        vector_blue = create_vector(file, 340)  # Blue team stats
+        vector_red = create_vector(file, 900)   # Red team stats
+        df.loc[len(df)] = vector_blue + vector_red + [-1]
 
     df.to_csv("ow_training_data.csv", index=False)
 
@@ -77,7 +86,6 @@ def add_data():
 def add_rand_data(num_rows):
     """
     Add num_rows rows of random vectors to the dataset
-    :return:
     """
 
     if (df := get_df()) is None:
@@ -85,9 +93,12 @@ def add_rand_data(num_rows):
 
     rng = np.random.default_rng()
     for _ in range(num_rows):
-        vector_a = list(rng.integers(low=0, high=75, size=3))
-        vector_b = list(rng.integers(low=0, high=100000, size=3))
-        df.loc[len(df)] = vector_a + vector_b + [-1]
+        new_vector = []
+        for _ in range(2):  # Get blue and red stats
+            new_vector += list(rng.integers(low=0, high=75, size=3))
+            new_vector += list(rng.integers(low=0, high=100000, size=3))
+
+        df.loc[len(df)] = new_vector + [-1]  # -1 is a placeholder for win value
 
     df.to_csv("ow_training_data.csv", index=False)
 
@@ -95,7 +106,7 @@ def add_rand_data(num_rows):
 def train_data():
     """
     Train a linear regression model based on the existing dataset
-    :return my_lr_model: The newly trained linear regression model
+    :return: The newly trained linear regression model
     """
     if (df := get_df()) is None:
         return
@@ -104,10 +115,10 @@ def train_data():
     print(f"\nTraining Data:\n{training_data}")
     print(f"\nTesting Data:\n{testing_data}")
 
-    training_labels = training_data["Win"]
-    training_data = training_data.drop(["Win"], axis=1)
-    testing_labels = testing_data["Win"]
-    testing_data = testing_data.drop(["Win"], axis=1)
+    training_labels = training_data["B_Win"]
+    training_data = training_data.drop(["B_Win"], axis=1)
+    testing_labels = testing_data["B_Win"]
+    testing_data = testing_data.drop(["B_Win"], axis=1)
     print(f"\nTraining Labels:\n{training_labels}")
     print(f"\nTesting Labels:\n{testing_labels}")
 
@@ -128,23 +139,32 @@ def predict_vector(my_lr_model):
     """
     Predict the label category for a newly entered data vector
     :param my_lr_model: The linear regression model
-    :return:
     """
     new_vector = []
 
     print()
-    for curr_index in range(6):
-        new_value = input(f"Enter value #{curr_index}: ")
+    for curr_col in column_names:
+        while True:
+            try:
+                new_value = int(input(f"Enter a value for {curr_col}: "))
+            except ValueError:
+                continue
+            break
+
         new_vector.append(int(new_value))
 
-    column_names = ['Eliminations', 'Assists', 'Deaths', 'Damage', 'Healing', 'Mitigated']
     df = pd.DataFrame([new_vector], columns=column_names)
 
-    predicted_label = my_lr_model.predict(df)
-    print(f"\nPredicted Label: {predicted_label}")
+    prediction = my_lr_model.predict(df)
+    win_chance = my_lr_model.predict_proba(df)[0][1] * 100
+    predicted_outcome = "You will win!" if prediction == 1 else "You will lose..."
+    print(f"\n{predicted_outcome} ({win_chance}% chance)")
 
 
 def intro():
+    """
+    Prompt for user input repeatedly and call relevant helper functions until quitting
+    """
     model = None  # Stores the logistic regression model if it exists
 
     print("\nWelcome to the Overwatch win predictor by Kai Sherman!")
@@ -168,6 +188,7 @@ def intro():
             confirmation = input("This will delete all data and reset the dataset! Are you sure (y/n)? ")
             if confirmation.lower() == 'n':
                 continue
+            # TODO: Something
         elif choice.lower() == 't':
             model = train_data()
         elif choice.lower() == 'p':
