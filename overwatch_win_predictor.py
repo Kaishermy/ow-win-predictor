@@ -13,6 +13,7 @@ import warnings
 
 column_names = ['B_Eliminations', 'B_Assists', 'B_Deaths', 'B_Damage', 'B_Healing', 'B_Mitigated',
                 'R_Eliminations', 'R_Assists', 'R_Deaths', 'R_Damage', 'R_Healing', 'R_Mitigated']
+data_path = "ow_training_data.csv"
 
 
 def create_vector(img_file, left_offset, top_offset):
@@ -56,11 +57,10 @@ def get_df():
     :return: Pandas df if successful and None otherwise
     """
 
-    training_data_path = "ow_training_data.csv"
-    if os.path.exists(training_data_path):
-        return pd.read_csv("ow_training_data.csv")
+    if os.path.exists(data_path):
+        return pd.read_csv(data_path)
     else:
-        print(training_data_path, "does not exist")
+        print(data_path, "does not exist")
         return None
 
 
@@ -83,7 +83,7 @@ def add_data():
         vector_red = create_vector(file.path, 1215, 900)  # Red team stats
         df.loc[len(df)] = vector_blue + vector_red + [-1]
 
-    df.to_csv("ow_training_data.csv", index=False)
+    df.to_csv(data_path, index=False)
 
 
 def add_rand_data(num_rows):
@@ -104,7 +104,17 @@ def add_rand_data(num_rows):
 
         df.loc[len(df)] = new_vector + [-1]  # -1 is a placeholder for win value
 
-    df.to_csv("ow_training_data.csv", index=False)
+    df.to_csv(data_path, index=False)
+
+
+def initialize_data():
+    """
+    Create a fresh, empty .csv file, replacing the old one if it exists
+    """
+
+    df = pd.DataFrame(columns=column_names + ["B_Win"])
+    df.to_csv(data_path, index=False)
+    print("Data initialized at ow_training_data.csv!")
 
 
 def train_data():
@@ -112,7 +122,13 @@ def train_data():
     Train a linear regression model based on the existing dataset
     :return: The newly trained linear regression model
     """
-    if (df := get_df()) is None:
+
+    if (df := get_df()) is None or df.empty:
+        print("Training failed: invalid dataframe.")
+        return
+
+    if df["B_Win"].isin([-1]).any():
+        print("Training failed: invalid B_Win value(s).")
         return
 
     training_data, testing_data = train_test_split(df, test_size=0.3)
@@ -136,6 +152,7 @@ def train_data():
     # print(f"\nConfusion Matrix:\n{my_cm}")
     # print(f"\nOriginal Probabilities:\n{my_lr_model.predict_proba(testing_data)}")
 
+    print("Training successful!")
     return my_lr_model
 
 
@@ -173,32 +190,6 @@ def listen_for_key(my_lr_model):
         msvcrt.getch()
 
 
-def predict_vector(my_lr_model):
-    """
-    Predict the label category for a newly entered data vector
-    :param my_lr_model: The linear regression model
-    """
-    new_vector = []
-
-    print()
-    for curr_col in column_names:
-        while True:
-            try:
-                new_value = int(input(f"Enter a value for {curr_col}: "))
-            except ValueError:
-                continue
-            break
-
-        new_vector.append(int(new_value))
-
-    df = pd.DataFrame([new_vector], columns=column_names)
-
-    prediction = my_lr_model.predict(df)
-    win_chance = my_lr_model.predict_proba(df)[0][1] * 100
-    predicted_outcome = "You will win!" if prediction == 1 else "You will lose..."
-    print(f"\n{predicted_outcome} ({win_chance}% chance)")
-
-
 def intro():
     """
     Prompt for user input repeatedly and call relevant helper functions until quitting
@@ -227,11 +218,10 @@ def intro():
             confirmation = input("This will delete all data and reset the dataset! Are you sure (y/n)? ")
             if confirmation.lower() == 'n':
                 continue
-            # TODO: Something
+            initialize_data()
 
         elif choice.lower() == 't':
             model = train_data()
-            print("Training successful!")
 
         elif choice.lower() == 'p':
             if model is None:
