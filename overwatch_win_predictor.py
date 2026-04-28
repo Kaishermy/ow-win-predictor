@@ -25,14 +25,14 @@ def create_vector(img_file, left_offset, top_offset):
     :return: A vectorized form of the scoreboard being scanned, where each column is the sum of that stat
     """
 
+    image_original = cv2.imread(img_file)
     new_vector = []
     pixels_to_jump = 75
     width = 75
 
     for _ in range(2):  # 2 regions
         for _ in range(3):  # 3 stats per region (due to horizontal gap between E/A/D and DMG/H/MIT)
-            image = cv2.imread(img_file)
-            image = image[top_offset:top_offset + 400, left_offset:left_offset + width]
+            image = image_original[top_offset:top_offset + 400, left_offset:left_offset + width]
             image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convert from BGR to grayscale
             cfg = r'--psm 6 -c tessedit_char_whitelist=0123456789'
             extracted_text = pytesseract.image_to_string(image_gray, config=cfg)
@@ -44,8 +44,8 @@ def create_vector(img_file, left_offset, top_offset):
 
             left_offset += pixels_to_jump
 
-        left_offset += 260
-        pixels_to_jump = 125
+        left_offset += 110 - pixels_to_jump  # Offset by pixels_to_jump so we don't stack jumps
+        pixels_to_jump = 135
         width = 100
 
     return new_vector
