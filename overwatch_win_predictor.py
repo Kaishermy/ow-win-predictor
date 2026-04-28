@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from pynput.keyboard import Key, Listener, KeyCode
 import msvcrt
+import warnings
 
 column_names = ['B_Eliminations', 'B_Assists', 'B_Deaths', 'B_Damage', 'B_Healing', 'B_Mitigated',
                 'R_Eliminations', 'R_Assists', 'R_Deaths', 'R_Damage', 'R_Healing', 'R_Mitigated']
@@ -245,6 +246,7 @@ def intro():
 
 
 def main():
+    warnings.filterwarnings('ignore')  # Ignore Sklearn runtime warnings
     intro()
 
 
