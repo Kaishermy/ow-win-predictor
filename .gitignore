@@ -2,3 +2,4 @@ Training/
 *.csv
 *.xlsx
 *.png
+*.joblib

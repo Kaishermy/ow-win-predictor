@@ -8,6 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from pynput.keyboard import Key, Listener, KeyCode
+import joblib
 import msvcrt
 import warnings
 
@@ -194,7 +195,10 @@ def intro():
     """
     Prompt for user input repeatedly and call relevant helper functions until quitting
     """
-    model = None  # Stores the logistic regression model if it exists
+    try:
+        model = joblib.load('model.joblib')
+    except FileNotFoundError:
+        model = None
 
     print("\nWelcome to the Overwatch win predictor by Kai Sherman!")
 
@@ -221,7 +225,11 @@ def intro():
             initialize_data()
 
         elif choice.lower() == 't':
+            confirmation = input("This will replace the existing model! Are you sure (y/n)? ")
+            if confirmation.lower() == 'n':
+                continue
             model = train_data()
+            joblib.dump(model, 'model.joblib')
 
         elif choice.lower() == 'p':
             if model is None:
